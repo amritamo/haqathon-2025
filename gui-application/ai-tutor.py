@@ -1,4 +1,3 @@
-
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, simpledialog
 import os
@@ -6,137 +5,348 @@ import json
 import fitz  # PyMuPDF
 import docx
 
-PROGRESS_FILE = "user_progress.json"
 
-class AiTutorApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("ai tutor - your learning companion")
-        self.sections = []
-        self.current_section_index = 0
-        self.completed_sections = set()
-        self.quiz_scores = {}
-        self.current_file = None
-        self.progress_data = self.load_progress()
+class AiTutorApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.container = tk.Frame(self)
+        self.container.pack(fill="both", expand=True)
+        self.show_landing_page()
 
-        self.upload_button = tk.Button(root, text="Upload Chapter", command=self.upload_file)
-        self.upload_button.pack(pady=10)
+    def show_landing_page(self):
+        # Clear previous widgets from the main container
+        for widget in self.container.winfo_children():
+            widget.destroy()
 
-        self.section_display = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=80, height=20)
-        self.section_display.pack(padx=10, pady=10)
+        # Title label
+        tk.Label(self.container, text="Your Chapters", font=("Arial", 18)).pack(pady=10)
 
-        self.summary_button = tk.Button(root, text="Generate Summary", command=self.generate_summary)
-        self.summary_button.pack(side=tk.LEFT, padx=10, pady=5)
+        # Frame for chapter tiles
+        chapters_frame = tk.Frame(self.container)
+        chapters_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-        self.quiz_button = tk.Button(root, text="Generate Quiz", command=self.generate_quiz)
-        self.quiz_button.pack(side=tk.LEFT, padx=10, pady=5)
+        # --- Load chapters and progress from the database here ---
+        # Example:
+        # self.chapters = db_load_chapters()
+        # self.progress = db_load_progress()
+        # --------------------------------------------------------
 
-        self.complete_button = tk.Button(root, text="Mark as Completed", command=self.mark_completed)
-        self.complete_button.pack(side=tk.LEFT, padx=10, pady=5)
+        self.chapters = [{"id": "1", "name": "ch1"}, {"id": "2", "name": "ch2"}, {"id": "3", "name": "ch3"}]
+        self.progress = {"1": 50, "2": 60, "3": 70}
+        # Display chapters as tiles in a grid
+        columns = 3  # Number of columns in the grid
+        for idx, chapter in enumerate(self.chapters):
+            progress = self.progress.get(chapter['id'], 0)
+            tile_text = f"{chapter['name']}\nProgress: {progress}%"
+            tile = tk.Button(
+                chapters_frame,
+                text=tile_text,
+                width=25,
+                height=5,
+                command=lambda c=chapter: self.show_chapter_view(c)
+            )
+            row, col = divmod(idx, columns)
+            tile.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
 
-        self.next_button = tk.Button(root, text="Next Section", command=self.next_section)
-        self.next_button.pack(side=tk.RIGHT, padx=10, pady=5)
+        # Make the grid cells expand evenly
+        for col in range(columns):
+            chapters_frame.grid_columnconfigure(col, weight=1)
 
-        self.dashboard_button = tk.Button(root, text="Dashboard", command=self.show_dashboard)
-        self.dashboard_button.pack(side=tk.RIGHT, padx=10, pady=5)
+        # Upload button
+        tk.Button(
+            self.container,
+            text="Upload New Chapter",
+            command=self.upload_chapter,
+            font=("Arial", 12),
+            bg="#4CAF50",
+            fg="white"
+        ).pack(pady=15)
 
-        self.progress_label = tk.Label(root, text="Progress: 0/0 sections completed")
-        self.progress_label.pack(pady=5)
+    def show_chapter_view(self, chapter):
+        self.current_chapter = chapter
 
-    def load_progress(self):
-        if os.path.exists(PROGRESS_FILE):
-            with open(PROGRESS_FILE, 'r') as f:
-                return json.load(f)
-        return {}
+        # Clear previous widgets from the main container
+        for widget in self.container.winfo_children():
+            widget.destroy()
 
-    def save_progress(self):
-        with open(PROGRESS_FILE, 'w') as f:
-            json.dump(self.progress_data, f, indent=2)
+        # --- Load sections for this chapter from the database ---
+        # Example:
+        # self.sections = db_load_sections(chapter['id'])
+        # --------------------------------------------------------
+        # For now, use placeholder if self.sections is empty
+        if not hasattr(self, 'sections') or not self.sections:
+            self.sections = [
+                {'title': 'Section 1', 'content': 'Content for section 1.'},
+                {'title': 'Section 2', 'content': 'Content for section 2.'},
+                {'title': 'Section 3', 'content': 'Content for section 3.'},
+            ]
 
-    def upload_file(self):
-        file_path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt"), ("PDF files", "*.pdf"), ("Word Documents", "*.docx")])
+        # Sidebar for section navigation
+        sidebar = tk.Frame(self.container, width=200, bg="#f0f0f0")
+        sidebar.pack(side="left", fill="y")
+
+        tk.Label(sidebar, text="Sections", font=("Arial", 12, "bold"), bg="#f0f0f0").pack(pady=5)
+        section_listbox = tk.Listbox(sidebar, font=("Arial", 11))
+        for idx, section in enumerate(self.sections):
+            section_listbox.insert(idx, section['title'])
+        section_listbox.pack(fill="both", expand=True, padx=5, pady=5)
+
+        def on_section_select(event):
+            sel = section_listbox.curselection()
+            if sel:
+                self.display_section_content(sel[0])
+        section_listbox.bind("<<ListboxSelect>>", on_section_select)
+
+        # Main content area
+        content_frame = tk.Frame(self.container)
+        content_frame.pack(side="right", fill="both", expand=True)
+        self.content_frame = content_frame
+
+        # Determine which section to display (first unread or resume progress)
+        # section_idx = db_get_next_section_idx(chapter['id'])
+        section_idx = 0  # Placeholder for first section
+
+        self.display_section_content(section_idx)
+
+        # Bottom button frame
+        btn_frame = tk.Frame(content_frame)
+        btn_frame.pack(side="bottom", fill="x", pady=10)
+
+        tk.Button(
+            btn_frame,
+            text="Take Quiz",
+            command=self.show_quiz,
+            font=("Arial", 11),
+            bg="#1976D2",
+            fg="white"
+        ).pack(side="left", padx=10)
+
+        tk.Button(
+            btn_frame,
+            text="Ask AI Tutor",
+            command=self.show_conversation,
+            font=("Arial", 11),
+            bg="#388E3C",
+            fg="white"
+        ).pack(side="left", padx=10)
+
+        tk.Button(
+            btn_frame,
+            text="Back to Chapters",
+            command=self.show_landing_page,
+            font=("Arial", 11)
+        ).pack(side="right", padx=10)
+
+
+    def show_quiz(self):
+        # Clear the main container
+        for widget in self.container.winfo_children():
+            widget.destroy()
+
+        # --- Load quiz questions for the current chapter from the database ---
+        # Example:
+        # self.quiz_questions = db_load_quiz_questions(self.current_chapter['id'])
+        # --------------------------------------------------------
+        # Placeholder questions for demonstration
+        self.quiz_questions = [
+            {"question": "What is Python?", "choices": ["A snake", "A programming language", "A car", "A fruit"], "correct": 1},
+            {"question": "Which library is used for GUIs in Python?", "choices": ["NumPy", "Tkinter", "Pandas", "Requests"], "correct": 1},
+            {"question": "What does AI stand for?", "choices": ["Artificial Intelligence", "Automatic Input", "Apple Inc.", "Analog Interface"], "correct": 0}
+        ]
+
+        self.quiz_idx = 0
+        self.quiz_answers = []
+
+        # Helper function to display each question
+        def display_question():
+            # Clear previous question widgets
+            for widget in self.container.winfo_children():
+                widget.destroy()
+
+            if self.quiz_idx >= len(self.quiz_questions):
+                finish_quiz()
+                return
+
+            q = self.quiz_questions[self.quiz_idx]
+            tk.Label(self.container, text=f"Question {self.quiz_idx + 1} of {len(self.quiz_questions)}", font=("Arial", 14)).pack(pady=10)
+            tk.Label(self.container, text=q['question'], font=("Arial", 12)).pack(pady=10)
+
+            var = tk.IntVar(value=-1)
+            for idx, choice in enumerate(q['choices']):
+                tk.Radiobutton(self.container, text=choice, variable=var, value=idx, font=("Arial", 11)).pack(anchor="w", padx=30)
+
+            def next_question():
+                if var.get() == -1:
+                    tk.messagebox.showwarning("No Answer", "Please select an answer before continuing.")
+                    return
+                self.quiz_answers.append(var.get())
+                self.quiz_idx += 1
+                display_question()
+
+            tk.Button(self.container, text="Next", command=next_question, font=("Arial", 11)).pack(pady=15)
+            tk.Button(self.container, text="Cancel Quiz", command=lambda: self.show_chapter_view(self.current_chapter), font=("Arial", 10)).pack(pady=2)
+
+        # Helper function to finish the quiz
+        def finish_quiz():
+            # Calculate score
+            correct = 0
+            for idx, q in enumerate(self.quiz_questions):
+                if idx < len(self.quiz_answers) and self.quiz_answers[idx] == q['correct']:
+                    correct += 1
+            total = len(self.quiz_questions)
+            score_percent = int((correct / total) * 100)
+
+            # --- Update confidence score in the database here ---
+            # db_update_confidence(self.current_chapter['id'], score_percent)
+            # Optionally, record quiz results in the DB as well
+            # ---------------------------------------------------
+
+            # Show result
+            for widget in self.container.winfo_children():
+                widget.destroy()
+            tk.Label(self.container, text="Quiz Complete!", font=("Arial", 16)).pack(pady=15)
+            tk.Label(self.container, text=f"You scored {score_percent}% ({correct} out of {total})", font=("Arial", 13)).pack(pady=10)
+            tk.Button(self.container, text="Back to Chapter", command=lambda: self.show_chapter_view(self.current_chapter), font=("Arial", 11)).pack(pady=20)
+
+        # Start the quiz
+        display_question()
+
+
+    def show_conversation(self):
+        # Clear previous widgets from the main container
+        for widget in self.container.winfo_children():
+            widget.destroy()
+
+        # Title label
+        tk.Label(self.container, text="AI Tutor Conversation", font=("Arial", 16)).pack(pady=10)
+
+        # Frame for chat log and input
+        chat_frame = tk.Frame(self.container)
+        chat_frame.pack(fill="both", expand=True, padx=20, pady=10)
+
+        # Chat log (read-only text widget)
+        chat_log = tk.Text(chat_frame, state="disabled", height=15, wrap="word")
+        chat_log.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Entry for user input
+        entry = tk.Entry(chat_frame, font=("Arial", 11))
+        entry.pack(fill="x", padx=5, pady=5)
+
+        def send_query():
+            user_query = entry.get().strip()
+            if not user_query:
+                return
+
+            # Display user message in chat log
+            chat_log.config(state="normal")
+            chat_log.insert("end", f"You: {user_query}\n")
+            chat_log.config(state="disabled")
+            chat_log.see("end")
+            entry.delete(0, "end")
+
+            # --- Call LLM/AI model here to get a response ---
+            # Example:
+            # current_section = self.sections[self.current_section_idx]
+            # ai_response = llm_get_response(user_query, current_section)
+            ai_response = "AI Tutor response goes here."  # Placeholder
+            # ------------------------------------------------
+
+            # Display AI response in chat log
+            chat_log.config(state="normal")
+            chat_log.insert("end", f"AI Tutor: {ai_response}\n")
+            chat_log.config(state="disabled")
+            chat_log.see("end")
+
+        # Send button
+        tk.Button(chat_frame, text="Send", command=send_query, font=("Arial", 11)).pack(pady=5)
+
+        # Back button to return to chapter view
+        tk.Button(
+            self.container,
+            text="Back to Chapter",
+            command=lambda: self.show_chapter_view(self.current_chapter),
+            font=("Arial", 11)
+        ).pack(pady=10)
+
+    def upload_chapter(self):
+        # Open file dialog for .txt or .pdf files
+        file_path = filedialog.askopenfilename(
+            filetypes=[("Text Files", "*.txt"), ("PDF Files", "*.pdf")]
+        )
         if not file_path:
-            return
-        self.current_file = os.path.basename(file_path)
-        content = self.extract_text(file_path)
-        self.sections = [s.strip() for s in content.split('\n\n') if s.strip()]
-        self.current_section_index = 0
-        self.completed_sections = set(self.progress_data.get(self.current_file, {}).get("completed_sections", []))
-        self.quiz_scores = self.progress_data.get(self.current_file, {}).get("quiz_scores", {})
-        self.display_section()
-        self.update_progress()
+            return  # User cancelled
 
-    def extract_text(self, file_path):
-        if file_path.endswith(".txt"):
-            with open(file_path, 'r', encoding='utf-8') as f:
-                return f.read()
-        elif file_path.endswith(".pdf"):
-            doc = fitz.open(file_path)
-            text = ""
-            for page in doc:
-                text += page.get_text()
-            return text
-        elif file_path.endswith(".docx"):
-            doc = docx.Document(file_path)
-            return "\n\n".join([para.text for para in doc.paragraphs])
-        else:
-            return ""
+        # Prompt for confidence score in a modal dialog
+        score_win = tk.Toplevel(self)
+        score_win.title("Confidence Score")
+        score_win.geometry("300x120")
+        score_win.grab_set()  # Make modal
 
-    def display_section(self):
-        if self.sections:
-            self.section_display.delete(1.0, tk.END)
-            section_text = self.sections[self.current_section_index]
-            self.section_display.insert(tk.END, section_text)
-        else:
-            self.section_display.delete(1.0, tk.END)
-            self.section_display.insert(tk.END, "No sections available.")
+        tk.Label(score_win, text="Enter confidence score (0-100):", font=("Arial", 11)).pack(pady=8)
+        score_entry = tk.Entry(score_win, font=("Arial", 11))
+        score_entry.pack(pady=5)
 
-    def generate_summary(self):
-        messagebox.showinfo("Summary", "This is a placeholder for the summary generated by the LLM.")
+        def submit_score():
+            try:
+                score = int(score_entry.get())
+                if not (0 <= score <= 100):
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Invalid Input", "Please enter a number between 0 and 100.")
+                return
 
-    def generate_quiz(self):
-        result = messagebox.askyesno("Quiz", "This is a placeholder for the quiz. Did you answer correctly?")
-        self.quiz_scores[str(self.current_section_index)] = int(result)
-        self.save_current_progress()
+            score_win.destroy()
 
-    def mark_completed(self):
-        self.completed_sections.add(self.current_section_index)
-        self.save_current_progress()
-        self.update_progress()
+            # --- Save chapter metadata and confidence score to the database ---
+            # chapter_id = db_insert_chapter(file_path, score)
+            # ---------------------------------------------------------------
 
-    def next_section(self):
-        if self.current_section_index + 1 < len(self.sections):
-            self.current_section_index += 1
-            self.display_section()
-        else:
-            messagebox.showinfo("End", "You have reached the end of the chapter.")
+            # --- Use LLM to break chapter into sections and store in DB ---
+            # sections = llm_split_chapter_into_sections(file_path)
+            # db_insert_sections(chapter_id, sections)
+            # ------------------------------------------------------------
 
-    def update_progress(self):
-        total = len(self.sections)
-        completed = len(self.completed_sections)
-        self.progress_label.config(text=f"Progress: {completed}/{total} sections completed")
+            # --- Reload chapters from the database ---
+            # self.chapters = db_load_chapters()
+            # self.progress = db_load_progress()
+            # ----------------------------------------
 
-    def save_current_progress(self):
-        if self.current_file:
-            self.progress_data[self.current_file] = {
-                "completed_sections": list(self.completed_sections),
-                "quiz_scores": self.quiz_scores
-            }
-            self.save_progress()
+            # Refresh landing page to show new chapter
+            self.show_landing_page()
 
-    def show_dashboard(self):
-        dashboard = tk.Toplevel(self.root)
-        dashboard.title("Progress Dashboard")
-        text = tk.Text(dashboard, wrap=tk.WORD, width=80, height=20)
-        text.pack(padx=10, pady=10)
-        for file, data in self.progress_data.items():
-            completed = len(data.get("completed_sections", []))
-            total = len(data.get("quiz_scores", {}))
-            correct = sum(data.get("quiz_scores", {}).values())
-            accuracy = f"{(correct / total * 100):.1f}%" if total > 0 else "N/A"
-            text.insert(tk.END, f"{file}\n  Sections Completed: {completed}\n  Quiz Accuracy: {accuracy}\n\n")
+        tk.Button(score_win, text="Submit", command=submit_score, font=("Arial", 11)).pack(pady=8)
+
+    def display_section_content(self, section_idx):
+        # Clear previous section content widgets in the content frame
+        for widget in self.content_frame.winfo_children():
+            widget.destroy()
+
+        # --- Retrieve the section data ---
+        # Example: section = self.sections[section_idx]
+        # If using DB, ensure self.sections is up-to-date
+        section = self.sections[section_idx]
+
+        # Section Title
+        tk.Label(
+            self.content_frame,
+            text=section['title'],
+            font=("Arial", 14, "bold")
+        ).pack(pady=(10, 5))
+
+        # Section Content
+        text_widget = tk.Text(
+            self.content_frame,
+            wrap="word",
+            height=18,
+            font=("Arial", 12)
+        )
+        text_widget.insert("1.0", section['content'])
+        text_widget.config(state="disabled")  # Make read-only
+        text_widget.pack(fill="both", expand=True, padx=10, pady=5)
+
+
+
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = AiTutorApp(root)
-    root.mainloop()
+    app = AiTutorApp()
+    app.mainloop()
