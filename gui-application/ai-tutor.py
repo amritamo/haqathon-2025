@@ -4,6 +4,9 @@ import os
 import json
 import fitz  # PyMuPDF
 import docx
+import requests
+import traceback
+
 
 
 class AiTutorApp(tk.Tk):
@@ -232,8 +235,6 @@ class AiTutorApp(tk.Tk):
         entry = tk.Entry(chat_frame, font=("Arial", 11))
         entry.pack(fill="x", padx=5, pady=5)
 
-        import requests
-        import traceback
 
         def send_query():
             user_query = entry.get().strip()
@@ -252,16 +253,25 @@ class AiTutorApp(tk.Tk):
                 import traceback
 
                 payload = {
-                    "model": "qnn-deepseek-r1-distill-qwen-1.5b",
-                    "messages": [
-                        {"role": "user", "content": user_query}
-                    ],
-                    "temperature": 0.7,
-                    "top_p": 1,
-                    "top_k": 10,
-                    "max_tokens": 400,
-                    "stream": False
-                }
+                "model": "qnn-deepseek-r1-distill-qwen-1.5b",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are an AI tutor. Respond with brief, structured, and beginner-friendly explanations. Avoid internal thoughts, planning steps, or filler language. Use bullet points or short paragraphs. Focus only on the essential concepts. Keep responses under 150 words unless asked to elaborate."
+                    },
+
+                    {
+                        "role": "user",
+                        "content": user_query
+                    }
+                ],
+                "temperature": 0.7,
+                "top_p": 1,
+                "top_k": 10,
+                "max_tokens": 400,
+                "stream": False
+            }
+
 
                 response = requests.post(
                     "http://127.0.0.1:5272/v1/chat/completions", # change this based on your ONNX runtime server's endpoint
@@ -358,6 +368,16 @@ class AiTutorApp(tk.Tk):
         ).pack(pady=(10, 5))
 
         # Section Content
+        # text_widget = tk.Text(
+        #     self.content_frame,
+        #     wrap="word",
+        #     height=18,
+        #     font=("Arial", 12)
+        # )
+        # text_widget.insert("1.0", section['content'])
+        # text_widget.config(state="disabled")  # Make read-only
+        # text_widget.pack(fill="both", expand=True, padx=10, pady=5)
+
         text_widget = tk.Text(
             self.content_frame,
             wrap="word",
@@ -365,10 +385,51 @@ class AiTutorApp(tk.Tk):
             font=("Arial", 12)
         )
         text_widget.insert("1.0", section['content'])
-        text_widget.config(state="disabled")  # Make read-only
         text_widget.pack(fill="both", expand=True, padx=10, pady=5)
 
+        popup_menu = tk.Menu(self, tearoff=0)
+        popup_menu.add_command(label="Ask AI Tutor", command=lambda: self.ask_ai_about_selection(text_widget))
 
+        def show_popup(event):
+            popup_menu.tk_popup(event.x_root, event.y_root)
+
+        text_widget.bind("<Button-3>", show_popup)  # Right-click on Windows/Linux
+
+
+    def ask_ai_about_selection(self, text_widget):
+        try:
+            selected_text = text_widget.get(tk.SEL_FIRST, tk.SEL_LAST).strip()
+        except tk.TclError:
+            messagebox.showinfo("No Selection", "Please select some text to ask about.")
+            return
+
+        if not selected_text:
+            return
+
+        try:
+            payload = {
+                "model": "qnn-deepseek-r1-distill-qwen-1.5b",
+                "messages": [{"role": "user", "content": selected_text}],
+                "temperature": 0.7,
+                "top_p": 1,
+                "top_k": 10,
+                "max_tokens": 400,
+                "stream": False
+            }
+
+            response = requests.post(
+                "http://127.0.0.1:5272/v1/chat/completions",
+                headers={"Content-Type": "application/json"},
+                data=json.dumps(payload),
+                timeout=400
+            )
+            response.raise_for_status()
+            reply = response.json()["choices"][0]["message"]["content"].strip()
+
+            messagebox.showinfo("AI Tutor Response", reply)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to get response:\n{str(e)}")
 
 
 if __name__ == "__main__":
