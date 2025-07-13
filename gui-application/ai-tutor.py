@@ -232,30 +232,43 @@ class AiTutorApp(tk.Tk):
         entry = tk.Entry(chat_frame, font=("Arial", 11))
         entry.pack(fill="x", padx=5, pady=5)
 
+        import requests
+        import traceback
+
         def send_query():
             user_query = entry.get().strip()
             if not user_query:
                 return
 
-            # Display user message in chat log
+            # Display user message
             chat_log.config(state="normal")
             chat_log.insert("end", f"You: {user_query}\n")
             chat_log.config(state="disabled")
             chat_log.see("end")
             entry.delete(0, "end")
 
-            # --- Call LLM/AI model here to get a response ---
-            # Example:
-            # current_section = self.sections[self.current_section_idx]
-            # ai_response = llm_get_response(user_query, current_section)
-            ai_response = "AI Tutor response goes here."  # Placeholder
-            # ------------------------------------------------
+            try:
+                response = requests.post(
+                    "http://localhost:5000/generate",
+                    json={"prompt": user_query},
+                    timeout=400  # prevent hanging
+                )
+                response.raise_for_status()
+                reply = response.json().get("reply", "").strip()
 
-            # Display AI response in chat log
+                # Optional: truncate if too long
+                if len(reply) > 1000:
+                    reply = reply[:1000] + "..."
+
+            except Exception as e:
+                reply = f"Error: {str(e)}\n{traceback.format_exc()}"
+
+            # Display AI response
             chat_log.config(state="normal")
-            chat_log.insert("end", f"AI Tutor: {ai_response}\n")
+            chat_log.insert("end", f"AI Tutor: {reply}\n")
             chat_log.config(state="disabled")
             chat_log.see("end")
+
 
         # Send button
         tk.Button(chat_frame, text="Send", command=send_query, font=("Arial", 11)).pack(pady=5)
