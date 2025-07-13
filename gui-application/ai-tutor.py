@@ -240,7 +240,6 @@ class AiTutorApp(tk.Tk):
             if not user_query:
                 return
 
-            # Display user message
             chat_log.config(state="normal")
             chat_log.insert("end", f"You: {user_query}\n")
             chat_log.config(state="disabled")
@@ -248,22 +247,34 @@ class AiTutorApp(tk.Tk):
             entry.delete(0, "end")
 
             try:
+                import requests
+                import json
+                import traceback
+
+                payload = {
+                    "model": "qnn-deepseek-r1-distill-qwen-1.5b",
+                    "messages": [
+                        {"role": "user", "content": user_query}
+                    ],
+                    "temperature": 0.7,
+                    "top_p": 1,
+                    "top_k": 10,
+                    "max_tokens": 400,
+                    "stream": False
+                }
+
                 response = requests.post(
-                    "http://localhost:5000/generate",
-                    json={"prompt": user_query},
-                    timeout=400  # prevent hanging
+                    "http://127.0.0.1:5272/v1/chat/completions", # change this based on your ONNX runtime server's endpoint
+                    headers={"Content-Type": "application/json"},
+                    data=json.dumps(payload),
+                    timeout=400
                 )
                 response.raise_for_status()
-                reply = response.json().get("reply", "").strip()
-
-                # Optional: truncate if too long
-                if len(reply) > 1000:
-                    reply = reply[:1000] + "..."
+                reply = response.json()["choices"][0]["message"]["content"].strip()
 
             except Exception as e:
                 reply = f"Error: {str(e)}\n{traceback.format_exc()}"
 
-            # Display AI response
             chat_log.config(state="normal")
             chat_log.insert("end", f"AI Tutor: {reply}\n")
             chat_log.config(state="disabled")
