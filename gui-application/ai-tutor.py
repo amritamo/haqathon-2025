@@ -7,6 +7,7 @@ import docx
 import requests
 import traceback
 from database_ops import *
+import re
 
 
 class AiTutorApp(tk.Tk):
@@ -131,7 +132,7 @@ class AiTutorApp(tk.Tk):
         # For now, use placeholder if self.sections is empty
         if not hasattr(self, 'sections') or not self.sections:
             self.sections = [
-                {'title': 'Section 1', 'content': 'Content for section 1.'},
+                {'title': 'Section 1', 'content': 'Cricket is a bat-and-ball game that is played between two teams of eleven players on a field, at the centre of which is a 22-yard (20-metre; 66-foot) pitch with a wicket at each end, each comprising two bails (small sticks) balanced on three stumps. Two players from the batting team, the striker and nonstriker, stand in front of either wicket holding bats, while one player from the fielding team, the bowler, bowls the ball toward the striker\'s wicket from the opposite end of the pitch. The striker\'s goal is to hit the bowled ball with the bat and then switch places with the nonstriker, with the batting team scoring one run for each of these swaps. Runs are also scored when the ball reaches the boundary of the field or when the ball is bowled illegally.'},
                 {'title': 'Section 2', 'content': 'Content for section 2.'},
                 {'title': 'Section 3', 'content': 'Content for section 3.'},
             ]
@@ -186,7 +187,7 @@ class AiTutorApp(tk.Tk):
         ).pack(side="right", padx=10)
 
         # Bottom button frame
-        btn_frame = tk.Frame(content_frame)
+        btn_frame = tk.Frame(self.content_frame)
         btn_frame.pack(side="bottom", fill="x", pady=10)
 
     def show_quiz(self):
@@ -391,7 +392,7 @@ class AiTutorApp(tk.Tk):
 
             score_win.destroy()
 
-            insert_chapter(self.db_conn, chapter_name, score)
+            chapter_id = insert_chapter(self.db_conn, chapter_name, score)
             # this must also trigger section processing
 
             # ---------------------------------------------------------------
@@ -423,17 +424,6 @@ class AiTutorApp(tk.Tk):
             font=("Arial", 14, "bold")
         ).pack(pady=(10, 5))
 
-        # Section Content
-        # text_widget = tk.Text(
-        #     self.content_frame,
-        #     wrap="word",
-        #     height=18,
-        #     font=("Arial", 12)
-        # )
-        # text_widget.insert("1.0", section['content'])
-        # text_widget.config(state="disabled")  # Make read-only
-        # text_widget.pack(fill="both", expand=True, padx=10, pady=5)
-
         text_widget = tk.Text(
             self.content_frame,
             wrap="word",
@@ -450,6 +440,12 @@ class AiTutorApp(tk.Tk):
             popup_menu.tk_popup(event.x_root, event.y_root)
 
         text_widget.bind("<Button-3>", show_popup)  # Right-click on Windows/Linux
+
+    def remove_think_blocks(text):
+        # Remove everything between <think>...</think> including tags
+        print(text)
+        return re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+
 
 
     def ask_ai_about_selection(self, text_widget):
@@ -469,7 +465,7 @@ class AiTutorApp(tk.Tk):
                 "temperature": 0.7,
                 "top_p": 1,
                 "top_k": 10,
-                "max_tokens": 400,
+                "max_tokens": 10000,
                 "stream": False
             }
 
@@ -481,8 +477,8 @@ class AiTutorApp(tk.Tk):
             )
             response.raise_for_status()
             reply = response.json()["choices"][0]["message"]["content"].strip()
-
-            messagebox.showinfo("AI Tutor Response", reply)
+            
+            messagebox.showinfo("AI Tutor Response", self.remove_think_blocks(reply))
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to get response:\n{str(e)}")
