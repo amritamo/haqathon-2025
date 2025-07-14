@@ -6,15 +6,21 @@ import fitz  # PyMuPDF
 import docx
 import requests
 import traceback
+from database_ops import *
 
 
 
 class AiTutorApp(tk.Tk):
     def __init__(self):
         super().__init__()
+        self.db_conn = get_connection_to_db()
+        init_database_tables(self.db_conn)
         self.container = tk.Frame(self)
         self.container.pack(fill="both", expand=True)
         self.show_landing_page()
+
+    def __del__(self):
+        close_connection(self.db_conn)
 
     def show_landing_page(self):
         # Clear previous widgets from the main container
