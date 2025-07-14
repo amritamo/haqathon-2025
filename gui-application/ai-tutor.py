@@ -81,42 +81,61 @@ class AiTutorApp(tk.Tk):
     def show_confidence(self):
         win = Toplevel(self)
         win.title("Confidence Meter")
-        win.geometry("400x300")
-        win.resizable(False, False)
+        win.geometry("500x600")
+        win.resizable(True, True)
 
-        # --- Section Scores (replace with real data if needed) ---
-        chapter_scores = {
-            "Section 1": 60,
-            "Section 2": 60,
-            "Section 3": 100
-        }
+        canvas = tk.Canvas(win)
+        scrollbar = ttk.Scrollbar(win, orient="vertical", command=canvas.yview)
+        scroll_frame = tk.Frame(canvas)
 
-        # --- Calculate Average for Overall Confidence ---
-        confidence_score = int(sum(chapter_scores.values()) / len(chapter_scores))
+        scroll_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
 
-        # --- Overall Confidence Section ---
-        tk.Label(win, text="Overall", font=("Arial", 13)).pack(pady=10)
+        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
 
-        overall_frame = tk.Frame(win)
-        overall_frame.pack(pady=5)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
 
-        progress = ttk.Progressbar(overall_frame, orient="horizontal", length=300, mode="determinate")
-        progress['value'] = confidence_score
-        progress.pack()
+        chapters = get_all_chapters(self.db_conn)
 
-        tk.Label(win, text=f"{confidence_score}%", font=("Arial", 11)).pack(pady=5)
+        for chapter in chapters:
+            chapter_id, chapter_name, confidence_score = chapter
 
-        tk.Label(win, text="Per Chapter", font=("Arial", 13)).pack(pady=(20, 10))
+            # --- Chapter Title and Confidence ---
+            tk.Label(scroll_frame, text=chapter_name, font=("Arial", 13, "bold")).pack(pady=(10, 0))
 
-        for title, score in chapter_scores.items():
-            frame = tk.Frame(win)
-            frame.pack(fill="x", padx=30, pady=5)
+            ch_frame = tk.Frame(scroll_frame)
+            ch_frame.pack(pady=5, fill="x", padx=30)
 
-            tk.Label(frame, text=title, width=12, anchor="w").pack(side="left")
-            bar = ttk.Progressbar(frame, orient="horizontal", length=200, mode="determinate")
-            bar['value'] = score
-            bar.pack(side="left", padx=5)
-            tk.Label(frame, text=f"{score}%", width=5).pack(side="left")
+            ch_bar = ttk.Progressbar(ch_frame, orient="horizontal", length=300, mode="determinate")
+            ch_bar['value'] = confidence_score
+            ch_bar.pack(side="left", padx=(0, 5))
+
+            tk.Label(ch_frame, text=f"{confidence_score}%", width=5).pack(side="left")
+
+            # --- Fetch and Display Sections ---
+            try:
+                sections = get_sections_by_chapter(self.db_conn, chapter_id)
+            except Exception as e:
+                sections = []  # Fallback if function or DB fails
+                print(f"Error getting sections: {e}")
+
+            for section in sections:
+                title = section[0]
+                # You can expand this if your section tuple has score as well
+                score = section[1] if len(section) > 1 else 0
+
+                sec_frame = tk.Frame(scroll_frame)
+                sec_frame.pack(pady=2, fill="x", padx=50)
+
+                tk.Label(sec_frame, text=title, width=20, anchor="w").pack(side="left")
+                sec_bar = ttk.Progressbar(sec_frame, orient="horizontal", length=200, mode="determinate")
+                sec_bar['value'] = score
+                sec_bar.pack(side="left", padx=(5, 5))
+                tk.Label(sec_frame, text=f"{score}%", width=5).pack(side="left")
 
     def show_chapter_view(self, chapter):
         self.current_chapter = chapter
