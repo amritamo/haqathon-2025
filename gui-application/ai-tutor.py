@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext, simpledialog
+from tkinter import filedialog, messagebox, scrolledtext, simpledialog, Toplevel, ttk
 import os
 import json
 import fitz  # PyMuPDF
@@ -70,6 +70,55 @@ class AiTutorApp(tk.Tk):
             bg="#4CAF50",
             fg="white"
         ).pack(pady=15)
+        
+        tk.Button(
+            self.container,
+            text="Show Confidence",
+            command=self.show_confidence,
+            font=("Arial", 12),
+            bg="#2196F3",
+            fg="white"
+        ).pack(pady=15)
+
+    def show_confidence(self):
+        win = Toplevel(self)
+        win.title("Confidence Meter")
+        win.geometry("400x300")
+        win.resizable(False, False)
+
+        # --- Section Scores (replace with real data if needed) ---
+        chapter_scores = {
+            "Section 1": 60,
+            "Section 2": 60,
+            "Section 3": 100
+        }
+
+        # --- Calculate Average for Overall Confidence ---
+        confidence_score = int(sum(chapter_scores.values()) / len(chapter_scores))
+
+        # --- Overall Confidence Section ---
+        tk.Label(win, text="Overall", font=("Arial", 13)).pack(pady=10)
+
+        overall_frame = tk.Frame(win)
+        overall_frame.pack(pady=5)
+
+        progress = ttk.Progressbar(overall_frame, orient="horizontal", length=300, mode="determinate")
+        progress['value'] = confidence_score
+        progress.pack()
+
+        tk.Label(win, text=f"{confidence_score}%", font=("Arial", 11)).pack(pady=5)
+
+        tk.Label(win, text="Per Chapter", font=("Arial", 13)).pack(pady=(20, 10))
+
+        for title, score in chapter_scores.items():
+            frame = tk.Frame(win)
+            frame.pack(fill="x", padx=30, pady=5)
+
+            tk.Label(frame, text=title, width=12, anchor="w").pack(side="left")
+            bar = ttk.Progressbar(frame, orient="horizontal", length=200, mode="determinate")
+            bar['value'] = score
+            bar.pack(side="left", padx=5)
+            tk.Label(frame, text=f"{score}%", width=5).pack(side="left")
 
     def show_chapter_view(self, chapter):
         self.current_chapter = chapter
@@ -107,19 +156,12 @@ class AiTutorApp(tk.Tk):
         section_listbox.bind("<<ListboxSelect>>", on_section_select)
 
         # Main content area
-        content_frame = tk.Frame(self.container)
-        content_frame.pack(side="right", fill="both", expand=True)
-        self.content_frame = content_frame
-
-        # Determine which section to display (first unread or resume progress)
-        # section_idx = db_get_next_section_idx(chapter['id'])
-        section_idx = 0  # Placeholder for first section
-
-        self.display_section_content(section_idx)
-
-        # Bottom button frame
-        btn_frame = tk.Frame(content_frame)
-        btn_frame.pack(side="bottom", fill="x", pady=10)
+        main_panel = tk.Frame(self.container)
+        main_panel.pack(side="right", fill="both", expand=True)
+        self.content_frame = tk.Frame(main_panel)
+        self.content_frame.pack(fill="both", expand=True)
+        btn_frame = tk.Frame(main_panel)
+        btn_frame.pack(fill="x", side="bottom", pady=10)
 
         tk.Button(
             btn_frame,
@@ -146,6 +188,9 @@ class AiTutorApp(tk.Tk):
             font=("Arial", 11)
         ).pack(side="right", padx=10)
 
+        # Bottom button frame
+        btn_frame = tk.Frame(content_frame)
+        btn_frame.pack(side="bottom", fill="x", pady=10)
 
     def show_quiz(self):
         # Clear the main container
