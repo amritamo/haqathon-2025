@@ -43,6 +43,7 @@ def insert_chapter(conn, chapter_name, confidence_score):
         VALUES (?, ?)
     ''', (chapter_name, confidence_score))
     conn.commit()
+    return cursor.lastrowid
 
 def insert_section(conn, chapter_id, section_id, section_text, quiz_score):
     cursor = conn.cursor()

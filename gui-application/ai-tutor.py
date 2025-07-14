@@ -50,7 +50,7 @@ class AiTutorApp(tk.Tk):
                 text=tile_text,
                 width=25,
                 height=5,
-                command=lambda c=chapter: self.show_chapter_view(c)
+                command=lambda c=chapter: self.show_chapter_view(chapter['id'])
             )
             row, col = divmod(idx, columns)
             tile.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
@@ -129,13 +129,23 @@ class AiTutorApp(tk.Tk):
         # Example:
         # self.sections = db_load_sections(chapter['id'])
         # --------------------------------------------------------
-        # For now, use placeholder if self.sections is empty
-        if not hasattr(self, 'sections') or not self.sections:
-            self.sections = [
-                {'title': 'Section 1', 'content': 'Cricket is a bat-and-ball game that is played between two teams of eleven players on a field, at the centre of which is a 22-yard (20-metre; 66-foot) pitch with a wicket at each end, each comprising two bails (small sticks) balanced on three stumps. Two players from the batting team, the striker and nonstriker, stand in front of either wicket holding bats, while one player from the fielding team, the bowler, bowls the ball toward the striker\'s wicket from the opposite end of the pitch. The striker\'s goal is to hit the bowled ball with the bat and then switch places with the nonstriker, with the batting team scoring one run for each of these swaps. Runs are also scored when the ball reaches the boundary of the field or when the ball is bowled illegally.'},
-                {'title': 'Section 2', 'content': 'Content for section 2.'},
-                {'title': 'Section 3', 'content': 'Content for section 3.'},
+        # For now, use placeholder if elf.sections is empty
+        # print("here")
+        sections = get_sections_by_chapter(self.db_conn, chapter)
+        # if not hasattr(self, 'sections') or not self.sections:
+        #     self.sections = [
+        #         {'title': 'Section 1', 'content': 'Cricket is a bat-and-ball game that is played between two teams of eleven players on a field, at the centre of which is a 22-yard (20-metre; 66-foot) pitch with a wicket at each end, each comprising two bails (small sticks) balanced on three stumps. Two players from the batting team, the striker and nonstriker, stand in front of either wicket holding bats, while one player from the fielding team, the bowler, bowls the ball toward the striker\'s wicket from the opposite end of the pitch. The striker\'s goal is to hit the bowled ball with the bat and then switch places with the nonstriker, with the batting team scoring one run for each of these swaps. Runs are also scored when the ball reaches the boundary of the field or when the ball is bowled illegally.'},
+        #         {'title': 'Section 2', 'content': 'Content for section 2.'},
+        #         {'title': 'Section 3', 'content': 'Content for section 3.'},
+        #     ]
+        self.sections = [
+                {
+                    'title': f"Section {item[0]}",
+                    'content': item[1]
+                }
+                for item in sections
             ]
+        # print("HEREHERHERHEHREHHREH")
 
         # Sidebar for section navigation
         sidebar = tk.Frame(self.container, width=200, bg="#f0f0f0")
@@ -333,7 +343,7 @@ class AiTutorApp(tk.Tk):
 
             except Exception as e:
                 reply = f"Error: {str(e)}\n{traceback.format_exc()}"
-
+            # print("here")
             chat_log.config(state="normal")
             chat_log.insert("end", f"AI Tutor: {reply}\n")
             chat_log.config(state="disabled")
@@ -359,6 +369,24 @@ class AiTutorApp(tk.Tk):
         )
         if not file_path:
             return  # User cancelled
+        
+        try:
+            if file_path.endswith('.txt'):
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    text = file.read()
+
+            elif file_path.endswith('.pdf'):
+                text = ""
+                with fitz.open(file_path) as doc:
+                    for page in doc:
+                        text += page.get_text()
+
+            else:
+                messagebox.showerror("Unsupported File", "Please select a .txt or .pdf file.")
+                return
+
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
         # Prompt for chapter name and confidence score
         score_win = tk.Toplevel(self)
@@ -376,6 +404,51 @@ class AiTutorApp(tk.Tk):
         score_entry = tk.Entry(score_win, font=("Arial", 11))
         score_entry.pack(pady=5)
 
+        #break text into sections
+        try:
+                import requests
+                import json
+                import traceback
+
+                payload = {
+                    "model": "qnn-deepseek-r1-distill-qwen-1.5b",
+                    "messages": [
+                        {
+                        "role": "system",
+                        "content": "You are an AI that restructures raw text into a structured JSON format. Infer logical section headings and divide the text accordingly. Return a JSON list, where each item has a 'heading' and 'content'. The content should be a short paragraph or a list of bullet points. Do not include explanations or extra commentary. Respond only with valid JSON."
+                        },
+                        {
+                        "role": "user",
+                        "content": text
+                        }
+                    ],
+                    "max_tokens": 4000
+                }
+
+                response = requests.post(
+                    "http://127.0.0.1:5272/v1/chat/completions", # change this based on your ONNX runtime server's endpoint
+                    headers={"Content-Type": "application/json"},
+                    data=json.dumps(payload),
+                    timeout=400
+                )
+                response.raise_for_status()
+                reply = response.json()["choices"][0]["message"]["content"].strip()
+
+        except Exception as e:
+            reply = f"Error: {str(e)}\n{traceback.format_exc()}"
+        # print(reply)
+
+        def extract_first_array(text):
+            match = re.search(r'\[[^\[\]]*?\]', text)
+            if match:
+                return match.group()
+            return None
+        try:
+            data = json.loads(extract_first_array(reply))
+        except (e):
+            print(e)
+            return
+        print(data)
         def submit_score():
             chapter_name = name_entry.get().strip()
             if not chapter_name:
@@ -393,6 +466,9 @@ class AiTutorApp(tk.Tk):
             score_win.destroy()
 
             chapter_id = insert_chapter(self.db_conn, chapter_name, score)
+            for idx, section in enumerate(data):
+                print(section)
+                insert_section(self.db_conn, chapter_id, idx+1, section["content"], 0)
             # this must also trigger section processing
 
             # ---------------------------------------------------------------
