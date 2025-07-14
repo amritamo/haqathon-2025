@@ -9,18 +9,22 @@ import traceback
 from database_ops import *
 
 
-
 class AiTutorApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.db_conn = get_connection_to_db()
         init_database_tables(self.db_conn)
+        # for now -- change this later \
         self.container = tk.Frame(self)
         self.container.pack(fill="both", expand=True)
         self.show_landing_page()
 
     def __del__(self):
         close_connection(self.db_conn)
+
+    def get_chapters(self):
+        chapters = get_all_chapters(self.db_conn)
+        return [{"id": str(ch[0]), "name": ch[1], "progress": ch[2]} for ch in chapters]
 
     def show_landing_page(self):
         # Clear previous widgets from the main container
@@ -34,19 +38,12 @@ class AiTutorApp(tk.Tk):
         chapters_frame = tk.Frame(self.container)
         chapters_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-        # --- Load chapters and progress from the database here ---
-        # Example:
-        # self.chapters = db_load_chapters()
-        # self.progress = db_load_progress()
-        # --------------------------------------------------------
-
-        self.chapters = [{"id": "1", "name": "ch1"}, {"id": "2", "name": "ch2"}, {"id": "3", "name": "ch3"}]
-        self.progress = {"1": 50, "2": 60, "3": 70}
+        chapters = self.get_chapters()
+        # self.progress = {"1": 50, "2": 60, "3": 70}
         # Display chapters as tiles in a grid
         columns = 3  # Number of columns in the grid
-        for idx, chapter in enumerate(self.chapters):
-            progress = self.progress.get(chapter['id'], 0)
-            tile_text = f"{chapter['name']}\nProgress: {progress}%"
+        for idx, chapter in enumerate(chapters):
+            tile_text = f"{chapter['name']}\nProgress: {chapter['progress']}%"
             tile = tk.Button(
                 chapters_frame,
                 text=tile_text,
@@ -354,6 +351,7 @@ class AiTutorApp(tk.Tk):
         ).pack(pady=10)
 
     def upload_chapter(self):
+
         # Open file dialog for .txt or .pdf files
         file_path = filedialog.askopenfilename(
             filetypes=[("Text Files", "*.txt"), ("PDF Files", "*.pdf")]
@@ -361,17 +359,28 @@ class AiTutorApp(tk.Tk):
         if not file_path:
             return  # User cancelled
 
-        # Prompt for confidence score in a modal dialog
+        # Prompt for chapter name and confidence score
         score_win = tk.Toplevel(self)
-        score_win.title("Confidence Score")
-        score_win.geometry("300x120")
-        score_win.grab_set()  # Make modal
+        score_win.title("Chapter Info")
+        score_win.geometry("350x200")
+        score_win.grab_set()
 
-        tk.Label(score_win, text="Enter confidence score (0-100):", font=("Arial", 11)).pack(pady=8)
+        # Chapter name input
+        tk.Label(score_win, text="Enter chapter name:", font=("Arial", 11)).pack(pady=(10, 5))
+        name_entry = tk.Entry(score_win, font=("Arial", 11))
+        name_entry.pack(pady=5)
+
+        # Confidence score input
+        tk.Label(score_win, text="Enter confidence score (0-100):", font=("Arial", 11)).pack(pady=5)
         score_entry = tk.Entry(score_win, font=("Arial", 11))
         score_entry.pack(pady=5)
 
         def submit_score():
+            chapter_name = name_entry.get().strip()
+            if not chapter_name:
+                messagebox.showerror("Missing Input", "Please enter a chapter name.")
+                return
+
             try:
                 score = int(score_entry.get())
                 if not (0 <= score <= 100):
@@ -382,8 +391,9 @@ class AiTutorApp(tk.Tk):
 
             score_win.destroy()
 
-            # --- Save chapter metadata and confidence score to the database ---
-            # chapter_id = db_insert_chapter(file_path, score)
+            insert_chapter(self.db_conn, chapter_name, score)
+            # this must also trigger section processing
+
             # ---------------------------------------------------------------
 
             # --- Use LLM to break chapter into sections and store in DB ---
@@ -391,15 +401,10 @@ class AiTutorApp(tk.Tk):
             # db_insert_sections(chapter_id, sections)
             # ------------------------------------------------------------
 
-            # --- Reload chapters from the database ---
-            # self.chapters = db_load_chapters()
-            # self.progress = db_load_progress()
-            # ----------------------------------------
-
             # Refresh landing page to show new chapter
             self.show_landing_page()
 
-        tk.Button(score_win, text="Submit", command=submit_score, font=("Arial", 11)).pack(pady=8)
+        tk.Button(score_win, text="Submit", command=submit_score, font=("Arial", 11)).pack(pady=10)
 
     def display_section_content(self, section_idx):
         # Clear previous section content widgets in the content frame
